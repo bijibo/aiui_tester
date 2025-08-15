@@ -9,7 +9,7 @@ dotenv.config({path: path.resolve(__dirname, '.env')});
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
-    testDir: './e2e',
+    testDir: './test_case',
     timeout: 900 * 1000,
     reporter: [["list"], ["@midscene/web/playwright-report"]],
     /* Run tests in files in parallel */
