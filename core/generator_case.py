@@ -1,12 +1,16 @@
 """
-测试用例生成器 - generator_case
-基于 midscene_insight 和 generator_step 实现完整的测试脚本生成功能
-
-功能：
-1. 生成单个测试用例
-2. 生成多个测试用例
-3. 保存到 e2e 目录
-4. 支持自然语言转换和手动构建两种模式
+**************************************
+*  @Author  ：   毕纪波
+*  @Time    ：   2025/8/14 10:02
+*  @Project :   ai-test
+*  @FileName:   generator_case.py
+*  @description:测试用例生成器
+                功能：
+                1. 生成单个测试用例
+                2. 生成多个测试用例
+                3. 保存到 e2e 目录
+                4. 支持自然语言转换和手动构建两种模式
+**************************************
 """
 
 import os
@@ -366,144 +370,144 @@ class TestCaseGenerator:
         return count
 
 
-def demo_natural_language_generation():
-    """演示自然语言生成测试用例"""
-    print("🚀 演示自然语言生成测试用例")
-    print("=" * 60)
-
-    # 初始化生成器（需要真实的API Key）
-    api_key = os.getenv('OPENAI_API_KEY', 'test-key')
-    generator = TestCaseGenerator()
-
-    # 你提供的自然语言
-    natural_language = "打开百度，搜索python，点击百度一下"
-
-    # 创建测试配置
-    config = TestCaseConfig(
-        name="百度搜索Python测试",
-        description="使用自然语言生成的百度搜索Python功能测试",
-        base_url="https://www.baidu.com",
-        setup_actions=[
-            "console.log('开始百度搜索Python测试');",
-            "console.log('OPENAI_API_KEY:', process.env.OPENAI_API_KEY);"
-        ]
-    )
-
-    print(f"📝 自然语言输入: {natural_language}")
-    print(f"🎯 测试名称: {config.name}")
-    print(f"🌐 基础URL: {config.base_url}")
-
-    try:
-        # 生成测试用例
-        print(f"\n🔄 正在生成测试用例...")
-        result = generator.generate_single_case_from_natural_language(natural_language, config)
-
-        if result['success']:
-            print(f"\n✅ 成功生成测试用例!")
-            print(f"📄 文件名: {result['filename']}")
-            print(f"📂 文件路径: {result['filepath']}")
-            print(f"🔢 任务数量: {result['task_count']}")
-            print(f"📝 原始描述: {result['natural_language']}")
-
-            # 显示生成的脚本内容
-            print(f"\n📜 生成的测试脚本:")
-            print("=" * 50)
-            print(result['script'])
-            print("=" * 50)
-
-            # 验证文件是否存在
-            if os.path.exists(result['filepath']):
-                file_size = os.path.getsize(result['filepath'])
-                print(f"\n📊 文件信息:")
-                print(f"  文件大小: {file_size} bytes")
-                print(f"  文件位置: {result['filepath']}")
-                print(f"  可直接在 Playwright 项目中使用")
-
-        else:
-            print(f"\n❌ 生成失败: {result['error']}")
-            print(f"💡 可能的原因:")
-            print(f"  1. 需要有效的 OPENAI_API_KEY 环境变量")
-            print(f"  2. 网络连接问题")
-            print(f"  3. API 配额不足")
-
-    except Exception as e:
-        print(f"\n❌ 生成过程中出现异常: {str(e)}")
-        print(f"💡 解决建议:")
-        print(f"  1. 设置环境变量: export OPENAI_API_KEY='your-api-key'")
-        print(f"  2. 检查网络连接")
-        print(f"  3. 确认 API Key 有效性")
-
-
-def demo_steps_generation():
-    """演示步骤生成测试用例（作为对比）"""
-    print(f"\n🔧 演示步骤生成测试用例（作为对比）")
-    print("=" * 60)
-
-    generator = TestCaseGenerator()
-
-    # 手动定义相同功能的步骤
-    steps = [
-        {'method': 'aiInput', 'args': ['搜索框', 'python'], 'kwargs': {}},
-        {'method': 'aiTap', 'args': ['百度一下按钮'], 'kwargs': {}},
-        {'method': 'aiWaitFor', 'args': ['搜索结果加载完成'], 'kwargs': {'options': {'timeoutMs': 10000}}},
-        {'method': 'aiAssert', 'args': ['显示Python相关搜索结果'], 'kwargs': {}}
-    ]
-
-    config = TestCaseConfig(
-        name="百度搜索Python步骤测试",
-        description="使用预定义步骤的百度搜索Python功能测试",
-        base_url="https://www.baidu.com"
-    )
-
-    print(f"📝 预定义步骤数量: {len(steps)}")
-    print(f"🎯 测试名称: {config.name}")
-
-    result = generator.generate_single_case_from_steps(steps, config)
-
-    if result['success']:
-        print(f"\n✅ 成功生成步骤测试用例!")
-        print(f"📄 文件名: {result['filename']}")
-        print(f"🔢 任务数量: {result['task_count']}")
-    else:
-        print(f"\n❌ 生成失败: {result['error']}")
-
-
-def main():
-    """主函数 - 演示自然语言生成测试用例"""
-    print("🎯 generator_case 自然语言生成演示")
-    print("=" * 80)
-
-    # 确保输出目录存在
-    os.makedirs("e2e", exist_ok=True)
-
-    # 演示自然语言生成
-    demo_natural_language_generation()
-
-    # 演示步骤生成（作为对比）
-    demo_steps_generation()
-
-    # 显示生成的文件列表
-    print(f"\n📂 查看生成的文件:")
-    print("-" * 40)
-
-    generator = TestCaseGenerator()
-    files = generator.list_generated_files()
-
-    if files:
-        for i, filepath in enumerate(files, 1):
-            filename = os.path.basename(filepath)
-            file_size = os.path.getsize(filepath) if os.path.exists(filepath) else 0
-            print(f"  {i}. {filename} ({file_size} bytes)")
-    else:
-        print("  (暂无生成的文件)")
-
-    print(f"\n🎉 演示完成!")
-    print(f"💡 使用说明:")
-    print(f"  1. 设置环境变量: export OPENAI_API_KEY='your-api-key'")
-    print(f"  2. 生成的文件保存在 'e2e' 目录")
-    print(f"  3. 可直接在 Playwright 项目中使用")
-    print(f"  4. 自然语言: '打开百度，搜索python，点击百度一下'")
-
-
-if __name__ == "__main__":
-    main()
+# def demo_natural_language_generation():
+#     """演示自然语言生成测试用例"""
+#     print("🚀 演示自然语言生成测试用例")
+#     print("=" * 60)
+#
+#     # 初始化生成器（需要真实的API Key）
+#     api_key = os.getenv('OPENAI_API_KEY', 'test-key')
+#     generator = TestCaseGenerator()
+#
+#     # 你提供的自然语言
+#     natural_language = "打开百度，搜索python，点击百度一下"
+#
+#     # 创建测试配置
+#     config = TestCaseConfig(
+#         name="百度搜索Python测试",
+#         description="使用自然语言生成的百度搜索Python功能测试",
+#         base_url="https://www.baidu.com",
+#         setup_actions=[
+#             "console.log('开始百度搜索Python测试');",
+#             "console.log('OPENAI_API_KEY:', process.env.OPENAI_API_KEY);"
+#         ]
+#     )
+#
+#     print(f"📝 自然语言输入: {natural_language}")
+#     print(f"🎯 测试名称: {config.name}")
+#     print(f"🌐 基础URL: {config.base_url}")
+#
+#     try:
+#         # 生成测试用例
+#         print(f"\n🔄 正在生成测试用例...")
+#         result = generator.generate_single_case_from_natural_language(natural_language, config)
+#
+#         if result['success']:
+#             print(f"\n✅ 成功生成测试用例!")
+#             print(f"📄 文件名: {result['filename']}")
+#             print(f"📂 文件路径: {result['filepath']}")
+#             print(f"🔢 任务数量: {result['task_count']}")
+#             print(f"📝 原始描述: {result['natural_language']}")
+#
+#             # 显示生成的脚本内容
+#             print(f"\n📜 生成的测试脚本:")
+#             print("=" * 50)
+#             print(result['script'])
+#             print("=" * 50)
+#
+#             # 验证文件是否存在
+#             if os.path.exists(result['filepath']):
+#                 file_size = os.path.getsize(result['filepath'])
+#                 print(f"\n📊 文件信息:")
+#                 print(f"  文件大小: {file_size} bytes")
+#                 print(f"  文件位置: {result['filepath']}")
+#                 print(f"  可直接在 Playwright 项目中使用")
+#
+#         else:
+#             print(f"\n❌ 生成失败: {result['error']}")
+#             print(f"💡 可能的原因:")
+#             print(f"  1. 需要有效的 OPENAI_API_KEY 环境变量")
+#             print(f"  2. 网络连接问题")
+#             print(f"  3. API 配额不足")
+#
+#     except Exception as e:
+#         print(f"\n❌ 生成过程中出现异常: {str(e)}")
+#         print(f"💡 解决建议:")
+#         print(f"  1. 设置环境变量: export OPENAI_API_KEY='your-api-key'")
+#         print(f"  2. 检查网络连接")
+#         print(f"  3. 确认 API Key 有效性")
+#
+#
+# def demo_steps_generation():
+#     """演示步骤生成测试用例（作为对比）"""
+#     print(f"\n🔧 演示步骤生成测试用例（作为对比）")
+#     print("=" * 60)
+#
+#     generator = TestCaseGenerator()
+#
+#     # 手动定义相同功能的步骤
+#     steps = [
+#         {'method': 'aiInput', 'args': ['搜索框', 'python'], 'kwargs': {}},
+#         {'method': 'aiTap', 'args': ['百度一下按钮'], 'kwargs': {}},
+#         {'method': 'aiWaitFor', 'args': ['搜索结果加载完成'], 'kwargs': {'options': {'timeoutMs': 10000}}},
+#         {'method': 'aiAssert', 'args': ['显示Python相关搜索结果'], 'kwargs': {}}
+#     ]
+#
+#     config = TestCaseConfig(
+#         name="百度搜索Python步骤测试",
+#         description="使用预定义步骤的百度搜索Python功能测试",
+#         base_url="https://www.baidu.com"
+#     )
+#
+#     print(f"📝 预定义步骤数量: {len(steps)}")
+#     print(f"🎯 测试名称: {config.name}")
+#
+#     result = generator.generate_single_case_from_steps(steps, config)
+#
+#     if result['success']:
+#         print(f"\n✅ 成功生成步骤测试用例!")
+#         print(f"📄 文件名: {result['filename']}")
+#         print(f"🔢 任务数量: {result['task_count']}")
+#     else:
+#         print(f"\n❌ 生成失败: {result['error']}")
+#
+#
+# def main():
+#     """主函数 - 演示自然语言生成测试用例"""
+#     print("🎯 generator_case 自然语言生成演示")
+#     print("=" * 80)
+#
+#     # 确保输出目录存在
+#     os.makedirs("e2e", exist_ok=True)
+#
+#     # 演示自然语言生成
+#     demo_natural_language_generation()
+#
+#     # 演示步骤生成（作为对比）
+#     demo_steps_generation()
+#
+#     # 显示生成的文件列表
+#     print(f"\n📂 查看生成的文件:")
+#     print("-" * 40)
+#
+#     generator = TestCaseGenerator()
+#     files = generator.list_generated_files()
+#
+#     if files:
+#         for i, filepath in enumerate(files, 1):
+#             filename = os.path.basename(filepath)
+#             file_size = os.path.getsize(filepath) if os.path.exists(filepath) else 0
+#             print(f"  {i}. {filename} ({file_size} bytes)")
+#     else:
+#         print("  (暂无生成的文件)")
+#
+#     print(f"\n🎉 演示完成!")
+#     print(f"💡 使用说明:")
+#     print(f"  1. 设置环境变量: export OPENAI_API_KEY='your-api-key'")
+#     print(f"  2. 生成的文件保存在 'e2e' 目录")
+#     print(f"  3. 可直接在 Playwright 项目中使用")
+#     print(f"  4. 自然语言: '打开百度，搜索python，点击百度一下'")
+#
+#
+# if __name__ == "__main__":
+#     main()
