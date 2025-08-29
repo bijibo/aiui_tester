@@ -42,6 +42,7 @@ class Task:
 
 class SingleInstructionMapper:
     """单一指令映射器"""
+
     def __init__(self):
         self.task_counter = 0
 
@@ -134,20 +135,21 @@ class SingleInstructionMapper:
         )
 
 
-class TestScriptGenerator:
+class ScriptGenerator:
     """测试脚本生成器"""
+
     def task_to_code(self, task: Task) -> str:
         """将任务转换为代码"""
-        if task.type == TaskType.ACTION:
+        if task.type == TaskType.ACTION.value:
             return self._action_task_to_code(task)
-        elif task.type == TaskType.EXTRACT:
+        elif task.type == TaskType.EXTRACT.value:
             return self._extract_task_to_code(task)
-        elif task.type == TaskType.ASSERT:
+        elif task.type == TaskType.ASSERT.value:
             return self._assert_task_to_code(task)
-        elif task.type == TaskType.WAIT:
+        elif task.type == TaskType.WAIT.value:
             return self._wait_task_to_code(task)
         else:
-            return f"  // TODO: 处理任务类型 {task.type.value}: {task.description}"
+            return f"  // TODO: 处理任务类型 {task.type}: {task.description}"
 
     @staticmethod
     def _action_task_to_code(task: Task) -> str:
@@ -170,9 +172,10 @@ class TestScriptGenerator:
             else:
                 return f"  await aiScroll({{ direction: 'down', scrollType: 'once' }});"
         else:
-            return f"  // TODO: 处理操作类型 {task.action_type.value}: {task.description}"
+            return f"  // TODO: 处理操作类型 {task.action_type}: {task.description}"
 
     def _extract_task_to_code(self, task: Task) -> str:
+        #TODO:测试代码
         """将提取任务转换为代码"""
         return_type = task.parameters.get('return_type', 'any')
         var_name = self._generate_variable_name(task.description)
@@ -204,6 +207,7 @@ class TestScriptGenerator:
 
     @staticmethod
     def _generate_variable_name(description: str) -> str:
+        # TODO:测试代码
         """从描述生成变量名"""
         if "商品" in description or "产品" in description:
             return "items"

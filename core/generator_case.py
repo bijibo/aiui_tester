@@ -15,17 +15,13 @@
 
 import os
 import re
-import json
 import time
-from typing import List, Dict, Any, Optional, Union
-from urllib.parse import urlparse
+from typing import List, Dict, Any
 from dataclasses import dataclass
 
-from accelerate.commands.config.update import description
-
-from core.midscene_insight import MidsceneInsight, TaskContext, TaskSequence, Task
-from core.generator_step import SingleInstructionMapper, TestScriptGenerator
-from core.enums import TaskType, ActionType
+from core.midscene_insight import MidsceneInsight, TaskContext, TaskSequence
+from core.generator_step import SingleInstructionMapper, ScriptGenerator
+from core.enums import ActionType
 
 
 @dataclass
@@ -48,10 +44,10 @@ class TestCaseConfig:
 class TestCaseGenerator:
     """测试用例生成器主类"""
 
-    def __init__(self, output_dir: str = r"..\e2e"):
+    def __init__(self, output_dir: str = r"../test_case"):
         self.insight = MidsceneInsight()
         self.mapper = SingleInstructionMapper()
-        self.script_generator = TestScriptGenerator()
+        self.script_generator = ScriptGenerator()
         self.output_dir = output_dir
 
         # 确保输出目录存在
@@ -68,43 +64,52 @@ class TestCaseGenerator:
         Returns:
             Dict: 包含生成结果的字典
         """
-        print(f"🔄 从自然语言生成测试用例: {natural_language}")
 
-        try:
-            # 创建上下文
-            context = TaskContext(
-                page_url=config.base_url,
-                page_title=config.name,
-                previous_actions=[]
-            )
+        # try:
+        # 创建上下文
+        context = TaskContext(
+            page_url=config.base_url,
+            page_title=config.name,
+            previous_actions=[]
+        )
 
-            # 使用AI解析自然语言
-            sequence = self.insight.parse_instruction(natural_language, context)
+        # 使用AI解析自然语言
+        sequence = self.insight.parse_instruction(natural_language, context)
+        print(
+            "====================================================================================================")
+        print("sequence: ", sequence)
+        print(
+            "====================================================================================================")
+        # 生成测试脚本
+        script = self._generate_test_script(sequence, config)
+        print(
+            "====================================================================================================")
+        print("script: ", script)
+        print(
+            "====================================================================================================")
 
-            # 生成测试脚本
-            script = self._generate_test_script(sequence, config)
+        # 保存到文件
+        filename = self._generate_filename(config.name)
+        filepath = self._save_script(script, filename)
 
-            # 保存到文件
-            filename = self._generate_filename(config.name)
-            filepath = self._save_script(script, filename)
+        return {
+            'success': True,
+            'filename': filename,
+            'filepath': filepath,
+            'script': script,
+            'task_count': len(sequence.tasks),
+            'natural_language': natural_language,
+            'config': config
+        }
 
-            return {
-                'success': True,
-                'filename': filename,
-                'filepath': filepath,
-                'script': script,
-                'task_count': len(sequence.tasks),
-                'natural_language': natural_language,
-                'config': config
-            }
-
-        except Exception as e:
-            return {
-                'success': False,
-                'error': str(e),
-                'natural_language': natural_language,
-                'config': config
-            }
+        # except Exception as e:
+        #     print(e)
+        #     return {
+        #         'success': False,
+        #         'error': str(e),
+        #         'natural_language': natural_language,
+        #         'config': config
+        #     }
 
     def generate_single_case_from_steps(self,
                                         steps: List[Dict[str, Any]],
@@ -370,144 +375,16 @@ class TestCaseGenerator:
         return count
 
 
-# def demo_natural_language_generation():
-#     """演示自然语言生成测试用例"""
-#     print("🚀 演示自然语言生成测试用例")
-#     print("=" * 60)
-#
-#     # 初始化生成器（需要真实的API Key）
-#     api_key = os.getenv('OPENAI_API_KEY', 'test-key')
-#     generator = TestCaseGenerator()
-#
-#     # 你提供的自然语言
-#     natural_language = "打开百度，搜索python，点击百度一下"
-#
-#     # 创建测试配置
-#     config = TestCaseConfig(
-#         name="百度搜索Python测试",
-#         description="使用自然语言生成的百度搜索Python功能测试",
-#         base_url="https://www.baidu.com",
-#         setup_actions=[
-#             "console.log('开始百度搜索Python测试');",
-#             "console.log('OPENAI_API_KEY:', process.env.OPENAI_API_KEY);"
-#         ]
-#     )
-#
-#     print(f"📝 自然语言输入: {natural_language}")
-#     print(f"🎯 测试名称: {config.name}")
-#     print(f"🌐 基础URL: {config.base_url}")
-#
-#     try:
-#         # 生成测试用例
-#         print(f"\n🔄 正在生成测试用例...")
-#         result = generator.generate_single_case_from_natural_language(natural_language, config)
-#
-#         if result['success']:
-#             print(f"\n✅ 成功生成测试用例!")
-#             print(f"📄 文件名: {result['filename']}")
-#             print(f"📂 文件路径: {result['filepath']}")
-#             print(f"🔢 任务数量: {result['task_count']}")
-#             print(f"📝 原始描述: {result['natural_language']}")
-#
-#             # 显示生成的脚本内容
-#             print(f"\n📜 生成的测试脚本:")
-#             print("=" * 50)
-#             print(result['script'])
-#             print("=" * 50)
-#
-#             # 验证文件是否存在
-#             if os.path.exists(result['filepath']):
-#                 file_size = os.path.getsize(result['filepath'])
-#                 print(f"\n📊 文件信息:")
-#                 print(f"  文件大小: {file_size} bytes")
-#                 print(f"  文件位置: {result['filepath']}")
-#                 print(f"  可直接在 Playwright 项目中使用")
-#
-#         else:
-#             print(f"\n❌ 生成失败: {result['error']}")
-#             print(f"💡 可能的原因:")
-#             print(f"  1. 需要有效的 OPENAI_API_KEY 环境变量")
-#             print(f"  2. 网络连接问题")
-#             print(f"  3. API 配额不足")
-#
-#     except Exception as e:
-#         print(f"\n❌ 生成过程中出现异常: {str(e)}")
-#         print(f"💡 解决建议:")
-#         print(f"  1. 设置环境变量: export OPENAI_API_KEY='your-api-key'")
-#         print(f"  2. 检查网络连接")
-#         print(f"  3. 确认 API Key 有效性")
-#
-#
-# def demo_steps_generation():
-#     """演示步骤生成测试用例（作为对比）"""
-#     print(f"\n🔧 演示步骤生成测试用例（作为对比）")
-#     print("=" * 60)
-#
-#     generator = TestCaseGenerator()
-#
-#     # 手动定义相同功能的步骤
-#     steps = [
-#         {'method': 'aiInput', 'args': ['搜索框', 'python'], 'kwargs': {}},
-#         {'method': 'aiTap', 'args': ['百度一下按钮'], 'kwargs': {}},
-#         {'method': 'aiWaitFor', 'args': ['搜索结果加载完成'], 'kwargs': {'options': {'timeoutMs': 10000}}},
-#         {'method': 'aiAssert', 'args': ['显示Python相关搜索结果'], 'kwargs': {}}
-#     ]
-#
-#     config = TestCaseConfig(
-#         name="百度搜索Python步骤测试",
-#         description="使用预定义步骤的百度搜索Python功能测试",
-#         base_url="https://www.baidu.com"
-#     )
-#
-#     print(f"📝 预定义步骤数量: {len(steps)}")
-#     print(f"🎯 测试名称: {config.name}")
-#
-#     result = generator.generate_single_case_from_steps(steps, config)
-#
-#     if result['success']:
-#         print(f"\n✅ 成功生成步骤测试用例!")
-#         print(f"📄 文件名: {result['filename']}")
-#         print(f"🔢 任务数量: {result['task_count']}")
-#     else:
-#         print(f"\n❌ 生成失败: {result['error']}")
-#
-#
-# def main():
-#     """主函数 - 演示自然语言生成测试用例"""
-#     print("🎯 generator_case 自然语言生成演示")
-#     print("=" * 80)
-#
-#     # 确保输出目录存在
-#     os.makedirs("test_case", exist_ok=True)
-#
-#     # 演示自然语言生成
-#     demo_natural_language_generation()
-#
-#     # 演示步骤生成（作为对比）
-#     demo_steps_generation()
-#
-#     # 显示生成的文件列表
-#     print(f"\n📂 查看生成的文件:")
-#     print("-" * 40)
-#
-#     generator = TestCaseGenerator()
-#     files = generator.list_generated_files()
-#
-#     if files:
-#         for i, filepath in enumerate(files, 1):
-#             filename = os.path.basename(filepath)
-#             file_size = os.path.getsize(filepath) if os.path.exists(filepath) else 0
-#             print(f"  {i}. {filename} ({file_size} bytes)")
-#     else:
-#         print("  (暂无生成的文件)")
-#
-#     print(f"\n🎉 演示完成!")
-#     print(f"💡 使用说明:")
-#     print(f"  1. 设置环境变量: export OPENAI_API_KEY='your-api-key'")
-#     print(f"  2. 生成的文件保存在 'test_case' 目录")
-#     print(f"  3. 可直接在 Playwright 项目中使用")
-#     print(f"  4. 自然语言: '打开百度，搜索python，点击百度一下'")
-#
-#
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    generator = TestCaseGenerator()
+    natural_language = "点击邮箱/账号,输入账号13095515257，输入密码123456，提取输入的密码，校验密码是否是123456，鼠标移动到下一步，点击下一步，点击确认,等待页面加载成功，校验是否有商品管理按钮"
+
+    # 创建测试配置
+    config = TestCaseConfig(
+        name="qmai",
+        description="登录企迈账号",
+        base_url="https://account.qmai.cn/login",
+        setup_actions=[
+        ]
+    )
+    result = generator.generate_single_case_from_natural_language(natural_language, config)

@@ -12,9 +12,10 @@ import json
 import re
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict
-from openai import OpenAI
-from config.config import MidConfig, SYSTEM_PROMPTS
+
+from config.prompts import SYSTEM_PROMPTS
 from core.enums import TaskType, ActionType
+from tools.llm_manage import LLMManager
 
 
 @dataclass
@@ -100,47 +101,6 @@ class TaskSequence:
         }
 
 
-class AIModelManager:
-    """
-    AI模型管理器
-    """
-
-    def __init__(self):
-        """
-        初始化AI模型管理器
-        Args:
-            api_key: OpenAI API密钥
-            base_url: 自定义API端点（可选，用于代理或其他兼容服务）
-            model_name: 要使用的AI模型名称
-        """
-        self.client = OpenAI(
-            api_key=MidConfig.OPENAI_API_KEY,
-            base_url=MidConfig.OPENAI_BASE_URL
-        )
-        self.model_name = MidConfig.MODEL_NAME
-
-    def chat_completion(self, messages: List[Any], **kwargs) -> str:
-        """
-        对话方法
-        Args:
-            messages: 对话消息列表，包含role和content
-            **kwargs: 额外的API参数（如temperature、max_tokens等）
-        Returns:
-            str: AI模型生成的回复内容
-        Raises:
-            Exception: 当API调用失败时抛出异常
-        """
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=messages,
-                **kwargs
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            raise Exception(f"AI模型调用失败: {str(e)}")
-
-
 class InstructionParser:
     """
     解析自然语言指令并转换为结构化任务
@@ -149,7 +109,7 @@ class InstructionParser:
         action_patterns: 操作类型的正则表达式模式字典
     """
 
-    def __init__(self, ai_manager: AIModelManager):
+    def __init__(self, ai_manager: LLMManager):
         self.ai_manager = ai_manager
         # 定义操作类型的识别模式
         self.action_patterns = {
@@ -202,7 +162,6 @@ class InstructionParser:
                     return task_type.value
 
         return None
-
     def extract_task_type(self, instruction: str) -> Optional[TaskType]:
         """
         从指令中提取任务类型
@@ -255,12 +214,15 @@ class InstructionParser:
         ]
 
         try:
-            response = self.ai_manager.chat_completion(messages, temperature=0.0)  # 降低大模型的欺诈率
-
+            response = self.ai_manager.chat(messages)
             # 尝试从响应中提取JSON数组
             json_match = re.search(r'\[.*\]', response, re.DOTALL)
             if json_match:
+                print("==========================================================================================")
+                print("AI response:", json.loads(json_match.group()))
+                print("==========================================================================================")
                 return json.loads(json_match.group())
+
             else:
                 # 如果没有找到JSON数组，尝试解析整个响应
                 return json.loads(response)
@@ -306,7 +268,7 @@ class TaskGenerator:
         raw_action_type = task_data.get('action_type')
 
         # 修正类型映射 - 处理AI可能返回的错误类型
-        task_type, action_type = self._normalize_task_types(raw_type, raw_action_type)
+        task_type, action_type = raw_type, raw_action_type
 
         # 创建Task对象
         return Task(
@@ -320,44 +282,6 @@ class TaskGenerator:
             priority=task_data.get('priority', 0),
             dependencies=task_data.get('dependencies', [])
         )
-
-    def _normalize_task_types(self, raw_type: str, raw_action_type: str = None) -> tuple:
-        """
-        处理AI模型可能返回的不正确的类型映射，将其修正为正确的枚举值
-
-        Args:
-            raw_type: 原始任务类型字符串
-            raw_action_type: 原始操作类型字符串
-
-        Returns:
-            tuple: (TaskType, ActionType) 修正后的类型元组
-        """
-        # ActionType的所有有效值
-        valid_action_types = {e.value for e in ActionType}
-
-        # 如果raw_type实际上是一个ActionType，需要修正
-        if raw_type in valid_action_types:
-            # 这种情况下，任务类型应该是ACTION，操作类型是raw_type
-            task_type = TaskType.ACTION
-            action_type = ActionType(raw_type)
-        else:
-            # 正常情况，解析任务类型
-            try:
-                task_type = TaskType(raw_type)
-            except ValueError:
-                # 如果无法识别，默认为ACTION
-                task_type = TaskType.ACTION
-
-            # 解析操作类型
-            action_type = None
-            if raw_action_type:
-                try:
-                    action_type = ActionType(raw_action_type)
-                except ValueError:
-                    # 如果操作类型无效，设为None
-                    action_type = None
-
-        return task_type, action_type
 
     def generate_tasks(self, instruction: str, context: TaskContext) -> List[Task]:
         """
@@ -374,6 +298,10 @@ class TaskGenerator:
         tasks = []
         for task_data in task_data_list:
             task = self.create_task_from_dict(task_data)
+            print("====================================================================================================")
+            print("task",tasks)
+            print(
+                "====================================================================================================")
             tasks.append(task)
 
         return tasks
@@ -618,7 +546,7 @@ class MidsceneInsight:
         初始化 MidsceneInsight 实例
         """
         # 初始化各个组件
-        self.ai_manager = AIModelManager()
+        self.ai_manager = LLMManager()
         self.parser = InstructionParser(self.ai_manager)
         self.task_generator = TaskGenerator(self.parser)
         self.single_mapper = SingleInstructionMapper()
@@ -652,6 +580,9 @@ class MidsceneInsight:
 
         # 使用任务生成器解析指令并生成任务列表
         tasks = self.task_generator.generate_tasks(instruction, context)
+        print("====================================================================================================")
+        print("tasks: ",tasks)
+        print("====================================================================================================")
 
         # 创建任务序列对象
         sequence = TaskSequence(
@@ -795,3 +726,23 @@ class MidsceneInsight:
         # - 检查参数格式的正确性
 
         return True
+
+
+if __name__ == '__main__':
+    """
+    TaskSequence(
+        id='sequence_0001', 
+        description='打开百度，输入邓紫棋，点击百度一下，校验是否有下一页', 
+        tasks=[
+            Task(id='task_0001', type=<TaskType.ACTION: 'action'>, description='打开百度首页', target='https://www.baidu.com', value=None, action_type=<ActionType.NAVIGATE: 'navigate'>, parameters={}, priority=0, dependencies=[]), 
+            Task(id='task_0002', type=<TaskType.ACTION: 'action'>, description='在搜索框中输入邓紫棋', target='搜索输入框', value='邓紫棋', action_type=<ActionType.INPUT: 'input'>, parameters={}, priority=0, dependencies=[]), 
+            Task(id='task_0003', type=<TaskType.ACTION: 'action'>, description='点击百度一下按钮', target='百度一下按钮', value=None, action_type=<ActionType.CLICK: 'click'>, parameters={}, priority=0, dependencies=[]), 
+            Task(id='task_0004', type=<TaskType.ASSERT: 'assert'>, description='校验页面是否存在下一页按钮', target='下一页按钮', value=None, action_type=None, parameters={}, priority=0, dependencies=[])
+            ], 
+            context=TaskContext(page_url='http://www.baidu.com', page_title=None, previous_actions=[], current_state={}), metadata={'created_at': None, 'model_name': 'QwQ-32B', 'task_count': 4, 'source': 'ai_parsing'})
+    """
+    ins = MidsceneInsight()
+    task_context = TaskContext(page_url="http://www.baidu.com")
+    parser_result = ins.parse_instruction("打开百度，输入邓紫棋，点击百度一下，校验是否有下一页", task_context)
+    print(parser_result)
+
