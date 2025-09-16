@@ -7,65 +7,96 @@
 *  @description:通过大模型将自然语言转换成标准结构
 **************************************
 """
+from dataclasses import dataclass, asdict
+import re
 from typing import List, Any
 
+from langchain.chains.question_answering.map_reduce_prompt import messages
+
+from config import prompts
 from tools.llm_manage import LLMManager
+from tools.logger_util import get_logger
+
+"""
+如果使用图片作为提示词:
+await agent.aiHover(
+  {
+    image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...' // 省略的 base64 字符串
+  }
+);
+#
+await agent.aiTap(locate='页面顶部的登录按钮',options= { "deepThink": true ,"xpath":"XXXXX","cacheable":true}); #点击某个元素,用自然语言描述的元素定位，或使用图片作为提示词
+await agent.aiHover(locate='页面顶部的登录按钮',options= { "deepThink": true ,"xpath":"XXXXX","cacheable":true});#鼠标悬停某个元素上, 用自然语言描述的元素定位，或使用图片作为提示词
+await agent.aiInput(text='Hello World', locate='搜索框',options= { "deepThink": true ,"xpath":"XXXXX","cacheable":true,autoDismissKeyboard:true(如果为 true，则键盘会在输入文本后自动关闭，仅在 Android 中有效。默认值为 true)});#在某个元素中输入文本,用自然语言描述的元素定位，或使用图片作为提示词
+await agent.aiKeyboardPress('Enter', '搜索框',options= { "deepThink": true ,"xpath":"XXXXX","cacheable":true}); #按下键盘上的某个键,用自然语言描述的元素定位，，或使用图片作为提示词
+await agent.aiScroll(
+  scrollParam={ direction: 'up', distance: 100, scrollType: 'once' }, # direction: 'up' | 'down' | 'left' | 'right' - 滚动方向 ;distance: number - 滚动距离，单位为像素;scrollType: 'once' | 'untilBottom' | 'untilTop' | 'untilRight' | 'untilLeft' - 滚动类型
+  locate='表单区域',
+  ,options= { "deepThink": true ,"xpath":"XXXXX","cacheable":true});
+);
+const dataA = await agent.aiQuery(dataDemand={
+  time: '左上角展示的日期和时间，string',
+  userInfo: '用户信息，{name: string}',
+  tableFields: '表格的字段名，string[]',
+  tableDataRecord: '表格中的数据记录，{id: string, [fieldName]: string}[]',
+},
+options={
+"domIncluded"= boolean | 'visible-only', #是否向模型发送精简后的 DOM 信息，一般用于提取 UI 中不可见的属性，比如图片的链接。如果设置为 'visible-only'，则只发送可见的元素。默认值为 false。
+"screenshotIncluded"=true #是否向模型发送截图。默认值为 true
+}
+);
+await agent.aiAssert(assertion='"Sauce Labs Onesie" 的价格是 7.99',
+                     errorMsg="价格校验失败" #当断言失败时附加的可选错误提示信息。
+                     options={
+                        domIncluded= 
+                        screenshotIncluded=true
+                     }
+                     );
+
+"""
+
+
+@dataclass
+class Task:
 
 
 class StructureGenerator:
     def __init__(self):
         self.llm = LLMManager()
+        self.logger = get_logger(name=__name__)
 
-    def decompose_instruction(self, instruction: str) -> List[Any]:
+    def parse_language(self, natural_language: str) -> str:
         """
-        将自然语言指令分解为基本操作步骤
-        Args:
-            instruction: 自然语言指令
-        Returns:
-            List[Dict]: 操作步骤列表
+        将自然语言转化为指令集
+        :param natural_language:
+        :return:
         """
-        prompt = f"""
-        你是一个UI自动化测试专家。请将以下用户指令分解为基本的操作步骤。
+        system_prompt = prompts.PARSE_LANGUAGE_PROMPT
+        user_prompt = f"请分解以下指令：{natural_language}"
 
-        要求：
-        1. 每个步骤应该对应一个具体的Midscene API调用
-        2. 步骤应该按照执行顺序排列
-        3. 每个步骤包含操作类型和操作描述
+        messages = self.llm.set_prompt(system_prompt, user_prompt)
+        self.logger.info(f"将自然语言转化为指令集: <{natural_language}> ")
 
-        支持的操作类型：
-        - navigate: 页面导航
-        - click: 点击操作
-        - input: 输入操作
-        - scroll: 滚动操作
-        - hover: 悬停操作
-        - keyboard: 键盘操作
-        - assert: 断言操作
-        - extract: 数据提取
-        - wait: 等待操作
+        def validation_func(content: str) -> bool:
+            if len(content) < 2:
+                return False
+            return content[0] == '[' and content[-1] == ']'
 
-        用户指令：{instruction}
+        order_str = self.llm.chat_with_retry(
+            messages=messages,
+            re_info=("repl", r'.*?</think>'),
+            validation_func=validation_func,
+        )
 
-        请以JSON数组格式返回，每个元素包含：
-        - action_type: 操作类型
-        - description: 操作描述
-        - target: 目标元素（如果适用）
-        - value: 输入值（如果适用）
-        """
+        self.logger.info(f"转化成功：{order_str}")
+        return order_str
 
-        messages = [
-            {"role": "system", "content": "你是一个UI自动化测试专家。"},
-            {"role": "user", "content": prompt}
-        ]
-
-        try:
-            response = self.llm.chat(messages)
-            print(response)
-            # 解析返回的JSON
-            # steps = response
-            # return steps if isinstance(steps, list) else []
-        except Exception as e:
-            raise Exception(f"分解指令失败: {str(e)}")
+    def set_task_type(self, order_str: str):
+        system_prompt = prompts.PARSE_LANGUAGE_PROMPT
+        user_prompt = f"请分解以下指令：{natural_language}"
+        messages = self.llm.set_prompt(system_prompt, user_prompt)
 
 
 if __name__ == '__main__':
-    StructureGenerator().decompose_instruction("打开百度首页，输入“Python”，点击搜索按钮，等待搜索结果加载完成，获取搜索结果列表，并打印出来")
+    structure_generator = StructureGenerator()
+    structure_generator.parse_language("打开百度首页，输入“python”关键字，点击搜索按钮，查看搜索结果。")

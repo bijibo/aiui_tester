@@ -215,6 +215,7 @@ class InstructionParser:
 
         try:
             response = self.ai_manager.chat(messages)
+            print(response)
             # 尝试从响应中提取JSON数组
             json_match = re.search(r'\[.*\]', response, re.DOTALL)
             if json_match:

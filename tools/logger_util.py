@@ -155,6 +155,85 @@ class LoggerContextManager:
                              **self.context_data)
 
 
+class ProgressBar:
+    """进度条类，用于在控制台显示进度信息"""
+
+    def __init__(self, total: int, width: int = 50, complete_char: str = '█', incomplete_char: str = '░'):
+        """
+        初始化进度条
+
+        Args:
+            total: 总任务数
+            width: 进度条宽度（字符数）
+            complete_char: 已完成部分的字符
+            incomplete_char: 未完成部分的字符
+        """
+        self.total = total
+        self.width = width
+        self.complete_char = complete_char
+        self.incomplete_char = incomplete_char
+        self.current = 0
+
+    def update(self, current: int = None, increment: int = 1):
+        """
+        更新进度条
+
+        Args:
+            current: 当前进度值，如果提供则直接设置为该值
+            increment: 增量值，当current未提供时使用
+        """
+        if current is not None:
+            self.current = current
+        else:
+            self.current += increment
+
+        # 确保当前值不超过总数
+        self.current = min(self.current, self.total)
+
+    def render(self) -> str:
+        """
+        渲染进度条字符串
+
+        Returns:
+            str: 进度条字符串
+        """
+        if self.total == 0:
+            percentage = 100
+            completed_width = self.width
+        else:
+            percentage = int((self.current / self.total) * 100)
+            completed_width = int((self.current / self.total) * self.width)
+
+        remaining_width = self.width - completed_width
+
+        bar = (self.complete_char * completed_width +
+               self.incomplete_char * remaining_width)
+
+        return f"[{bar}] {percentage:3d}% ({self.current}/{self.total})"
+
+    def display(self, prefix: str = "", suffix: str = ""):
+        """
+        在控制台显示进度条
+
+        Args:
+            prefix: 进度条前缀文本
+            suffix: 进度条后缀文本
+        """
+        progress_str = self.render()
+        sys.stdout.write(f"\r{prefix}{progress_str}{suffix}")
+        sys.stdout.flush()
+
+    def finish(self, message: str = "完成"):
+        """
+        完成进度条显示
+
+        Args:
+            message: 完成时显示的消息
+        """
+        self.current = self.total
+        self.display(suffix=f" {message}\n")
+
+
 def get_logger(name: str = None) -> AIUITestLogger:
     """
     :param name:日志器名称

@@ -5,8 +5,8 @@
     "playwright": "^1.54.2"
   },
   "devDependencies": {
-    "@midscene/web": "^0.25.1",
-    "@playwright/test": "^1.54.2",
+    "@midscene/web": "^0.25.3",
+    "@playwright/test": "^1.55.0",
     "@types/dotenv": "^6.1.1",
     "@types/node": "^24.2.0"
   },

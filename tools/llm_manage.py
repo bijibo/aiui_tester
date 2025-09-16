@@ -7,10 +7,11 @@
 *  @description:
 **************************************
 """
-import time
-from typing import List, Any, Optional, Callable
-
-from openai import OpenAI
+from typing import List, Any, Optional, Callable, Union
+from pydantic import BaseModel
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
 
 from config.config import AIUIConfig
 from tools.logger_util import get_logger
@@ -28,7 +29,9 @@ class LLMManager:
             model_name: 要使用的AI模型名称
             temperature:联想参数
         """
-        self.client = OpenAI(
+        self.client = ChatOpenAI(
+            model=model_name,
+            temperature=temperature,
             api_key=AIUIConfig.OPENAI_API_KEY,
             base_url=AIUIConfig.OPENAI_BASE_URL
         )
@@ -36,86 +39,60 @@ class LLMManager:
         self.temperature = temperature
         self.logger = get_logger(name=__name__)
 
-    def chat(self, messages: List[Any], **kwargs) -> str:
+    def build_messages(
+            self,
+            sys_template: str = "",
+            sys_vars=None,
+            human_template: str = "",
+            human_vars=None
+    ):
+        if human_vars is None:
+            human_vars = {}
+        if sys_vars is None:
+            sys_vars = {}
+
+        return ChatPromptTemplate.from_messages([
+            ("system", sys_template),
+            ("human", human_template),
+        ]).partial(**{**sys_vars, **human_vars})
+
+    def chat(
+            self,
+            message: ChatPromptTemplate,
+            dataclazz: Optional[Any] = None
+    ) -> Union[str, Any]:
         """
-        对话方法
-        Args:
-            messages: 对话消息列表，包含role和content
-            **kwargs: 额外的API参数（如temperature、max_tokens等）
-        Returns:
-            str: AI模型生成的回复内容
-        Raises:
-            Exception: 当API调用失败时抛出异常
+        调用大模型进行对话，可选解析为 Pydantic 模型
+        :param message: 消息链
+        :param dataclazz: 可选的 Pydantic 模型类
+        :return: str 或 Pydantic 对象
         """
         try:
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=messages,
-                temperature=self.temperature,
-                **kwargs
-            )
-            return response.choices[0].message.content
+            # 是否需要结构化解析
+            if dataclazz:
+                output_parser = PydanticOutputParser(pydantic_object=dataclazz)
+                format_instructions = output_parser.get_format_instructions()
+                chain = message | self.client | output_parser
+                return chain.invoke({"format_instructions": format_instructions})
+            else:
+                chain = message | self.client
+                return chain.invoke({}).content
         except Exception as e:
-            self.logger.error(f"AI模型调用失败: {str(e)}")
-            raise Exception(f"AI模型调用失败: {str(e)}")
-
-    def chat_with_retry(self,
-                        messages: List[Any],
-                        validation_func: Optional[Callable[[str], bool]] = None,
-                        **kwargs) -> str | None:
-        """
-        带重试机制的对话方法，可根据自定义验证函数决定是否重试
-        Args:
-            messages: 对话消息列表，包含role和content
-            validation_func: 验证返回结果是否满足要求的函数，返回True表示满足要求无需重试
-                            函数签名: func(response: str) -> bool
-            **kwargs: 额外的API参数（如temperature、max_tokens等）
-        Returns:
-            str: AI模型生成的回复内容
-        Raises:
-            Exception: 当达到最大重试次数或API调用失败时抛出异常
-        """
-        retry_times = AIUIConfig.RETRY_TIMES
-        for attempt in range(retry_times + 1):
-            try:
-                response = self.client.chat.completions.create(
-                    model=self.model_name,
-                    messages=messages,
-                    temperature=self.temperature,
-                    **kwargs
-                )
-                content = response.choices[0].message.content
-                if validation_func is None:
-                    return content
-                if validation_func(content):
-                    return content
-                else:
-                    self.logger.warning(f"AI模型第{attempt + 1}次返回不满足要求: {content}")
-                    if attempt < retry_times:
-                        time.sleep(AIUIConfig.RETRY_DELAY)
-                        continue
-                    else:
-                        self.logger.warning(f"AI模型多次返回结果均不满足要求: {content}")
-            except Exception as e:
-                self.logger.error(f"AI模型调用失败: {str(e)}")
-                raise Exception(f"AI模型调用失败: {str(e)}")
-        return None
+            # 出错时给一个明确提示
+            return f"[Chat Error] {str(e)}"
 
 
 if __name__ == '__main__':
-    pass
-    # 示例:
-    # def validate_json_response(response):
-    #     """验证返回内容是否为有效的JSON格式"""
-    #     try:
-    #         json.loads(response)
-    #         return True
-    #     except json.JSONDecodeError:
-    #         return False
-    #
-    #
-    # messages = [{"role": "user", "content": "请以JSON格式返回{'name': '张三', 'age': 25}"}]
-    # response = llm_manager.chat_with_retry(
-    #     messages,
-    #     validation_func=validate_json_response
-    # )
+    class Summary(BaseModel):
+        title: str
+        keywords: List[str]
+
+
+    llm = LLMManager()
+    prompt = llm.build_messages(
+        sys_template="你是一个总结助手",
+        human_template="请帮我总结以下文本，并输出 JSON：{text}\n{format_instructions}",
+        human_vars={"text": "LangChain 是一个用于构建基于大语言模型应用的框架"}
+    )
+    result = llm.chat(prompt, Summary)
+    print(result.keywords)
